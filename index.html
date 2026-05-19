@@ -211,6 +211,7 @@
             .card { padding: 20px; }
         }
     </style>
+<base target="_blank">
 </head>
 <body>
     <canvas id="particles"></canvas>
@@ -1177,9 +1178,7 @@ function saveToSheetDB() {
         console.error('SheetDB Error:', error);
         var isLocalFile = window.location.protocol === 'file:';
         if (isLocalFile) {
-            showModal('⚠️ Atenção', 'Para enviar dados automaticamente, hospede o game no GitHub Pages.
-
-Os dados foram salvos localmente. Clique em "📥 Baixar CSV" para exportar.');
+            showModal('⚠️ Atenção', 'Para enviar dados automaticamente, hospede o game no GitHub Pages.\n\nOs dados foram salvos localmente. Clique em "📥 Baixar CSV" para exportar.');
         } else {
             showModal('❌ Erro', 'Não foi possível enviar para o SheetDB. Erro: ' + error.message);
         }
@@ -1244,7 +1243,7 @@ function exportToCSV() {
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     var link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'newton_game_' + data.player.name.split(' ').join('_') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+    link.download = 'newton_game_' + gameState.player.name.split(' ').join('_') + '_' + new Date().toISOString().slice(0,10) + '.csv';
     link.click();
     showModal('📊 CSV Gerado!', 'Arquivo CSV baixado! Importe-o manualmente no Google Planilhas ou configure a URL do Apps Script para envio automático.');
 }
