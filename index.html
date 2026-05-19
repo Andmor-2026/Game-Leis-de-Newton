@@ -1158,8 +1158,11 @@ function saveToSheetDB() {
 
     fetch(SHEETDB_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: rowData })
+        headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ data: [rowData] })
     })
     .then(function(response) {
         console.log('Response status:', response.status);
@@ -1180,7 +1183,7 @@ function saveToSheetDB() {
         if (isLocalFile) {
             showModal('⚠️ Atenção', 'Para enviar dados automaticamente, hospede o game no GitHub Pages.\n\nOs dados foram salvos localmente. Clique em "📥 Baixar CSV" para exportar.');
         } else {
-            showModal('❌ Erro', 'Não foi possível enviar para o SheetDB. Erro: ' + error.message);
+            showModal('❌ Erro SheetDB', 'Não foi possível enviar para o SheetDB.\n\nErro: ' + error.message + '\n\nVerifique:\n1. Se a URL do SheetDB está correta\n2. Se os cabeçalhos da planilha correspondem aos campos enviados\n3. Console do navegador (F12) para mais detalhes');
         }
     });
 }
@@ -1205,8 +1208,11 @@ function testSheetDB() {
 
     fetch(SHEETDB_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: testData })
+        headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ data: [testData] })
     })
     .then(function(response) {
         return response.json().then(function(data) {
