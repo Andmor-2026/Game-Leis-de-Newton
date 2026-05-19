@@ -1055,10 +1055,10 @@ function showVictory() {
         statusDiv.style.background = 'rgba(255,193,7,0.1)';
         statusDiv.style.border = '1px solid var(--warning)';
     } else {
+        statusDiv.innerHTML = '<span style="color:var(--primary);">⏳ Enviando dados para a planilha...</span>';
+        statusDiv.style.background = 'rgba(0,212,255,0.1)';
+        statusDiv.style.border = '1px solid var(--primary)';
         saveToSheetDB();
-        statusDiv.innerHTML = '<span style="color:var(--success);">✅ Dados enviados automaticamente para a planilha Google!</span>';
-        statusDiv.style.background = 'rgba(0,230,118,0.1)';
-        statusDiv.style.border = '1px solid var(--success)';
     }
     showScreen('screen-victory');
     showConfetti();
@@ -1150,11 +1150,12 @@ function saveToSheetDB() {
         Estrelas: gameState.stars,
         TempoTotal: gameState.totalTime,
         Precisao: accuracy + '%',
-        Data: new Date().toLocaleDateString('pt-BR')
+        Data: endTime.toLocaleDateString('pt-BR')
     };
 
-    console.log('SheetDB URL:', SHEETDB_URL);
-    console.log('Sending data:', rowData);
+    console.log('=== SHEETDB SAVE ===');
+    console.log('URL:', SHEETDB_URL);
+    console.log('Payload:', JSON.stringify({ data: [rowData] }, null, 2));
 
     fetch(SHEETDB_URL, {
         method: 'POST',
@@ -1165,17 +1166,22 @@ function saveToSheetDB() {
         body: JSON.stringify({ data: [rowData] })
     })
     .then(function(response) {
-        console.log('Response status:', response.status);
-        if (!response.ok) {
-            return response.text().then(function(text) {
+        console.log('Response status:', response.status, response.statusText);
+        return response.text().then(function(text) {
+            console.log('Response body:', text);
+            if (!response.ok) {
                 throw new Error('HTTP ' + response.status + ': ' + text);
-            });
-        }
-        return response.json();
+            }
+            try {
+                return JSON.parse(text);
+            } catch(e) {
+                return { raw: text };
+            }
+        });
     })
     .then(function(result) {
-        console.log('SheetDB success:', result);
-        showModal('✅ Sucesso!', 'Dados do grupo ' + gameState.player.name + ' enviados para a planilha com sucesso!');
+        console.log('SheetDB result:', result);
+        showModal('✅ Sucesso!', 'Dados enviados! Verifique a última linha da planilha.\n\nGrupo: ' + gameState.player.name);
     })
     .catch(function(error) {
         console.error('SheetDB Error:', error);
@@ -1183,7 +1189,7 @@ function saveToSheetDB() {
         if (isLocalFile) {
             showModal('⚠️ Atenção', 'Para enviar dados automaticamente, hospede o game no GitHub Pages.\n\nOs dados foram salvos localmente. Clique em "📥 Baixar CSV" para exportar.');
         } else {
-            showModal('❌ Erro SheetDB', 'Não foi possível enviar para o SheetDB.\n\nErro: ' + error.message + '\n\nVerifique:\n1. Se a URL do SheetDB está correta\n2. Se os cabeçalhos da planilha correspondem aos campos enviados\n3. Console do navegador (F12) para mais detalhes');
+            showModal('❌ Erro SheetDB', 'Não foi possível enviar.\n\nErro: ' + error.message + '\n\nVerifique no console (F12) os detalhes completos.');
         }
     });
 }
@@ -1194,17 +1200,22 @@ function testSheetDB() {
         return;
     }
 
+    var now = new Date();
     var testData = {
-        Grupo: 'TESTE_CONEXAO',
-        HoraInicio: new Date().toLocaleString('pt-BR'),
-        HoraFim: new Date().toLocaleString('pt-BR'),
+        Grupo: 'TESTE_CONEXAO_' + now.getTime(),
+        HoraInicio: now.toLocaleString('pt-BR'),
+        HoraFim: now.toLocaleString('pt-BR'),
         Pontuacao: 0,
         NivelMaximo: 0,
         Estrelas: 0,
         TempoTotal: 0,
         Precisao: '0%',
-        Data: new Date().toLocaleDateString('pt-BR')
+        Data: now.toLocaleDateString('pt-BR')
     };
+
+    console.log('SheetDB Test - Enviando:', testData);
+    console.log('SheetDB Test - URL:', SHEETDB_URL);
+    console.log('SheetDB Test - Body:', JSON.stringify({ data: [testData] }));
 
     fetch(SHEETDB_URL, {
         method: 'POST',
@@ -1215,13 +1226,20 @@ function testSheetDB() {
         body: JSON.stringify({ data: [testData] })
     })
     .then(function(response) {
-        return response.json().then(function(data) {
-            console.log('Test response:', data);
-            showModal('✅ Teste', 'Conexão com SheetDB OK! Verifique a planilha.');
+        console.log('SheetDB Test - Status:', response.status, response.statusText);
+        return response.text().then(function(text) {
+            console.log('SheetDB Test - Resposta bruta:', text);
+            try {
+                var data = JSON.parse(text);
+                console.log('SheetDB Test - JSON:', data);
+                showModal('✅ Teste SheetDB', 'Status: ' + response.status + '\nVerifique a planilha.\n\nResposta: ' + JSON.stringify(data));
+            } catch(e) {
+                showModal('⚠️ Resposta não-JSON', 'Status: ' + response.status + '\nResposta: ' + text.substring(0, 200));
+            }
         });
     })
     .catch(function(error) {
-        console.error('Test error:', error);
+        console.error('SheetDB Test - Erro:', error);
         showModal('❌ Erro', 'Falha na conexão: ' + error.message);
     });
 }
