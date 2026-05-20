@@ -271,15 +271,7 @@
                 <div id="loginError" style="color:var(--danger);text-align:center;margin-top:15px;display:none;">
                     Digite o nome do grupo para continuar!
                 </div>
-                <script>
-                // Show warning if Apps Script URL is empty
-                (function(){
-                    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === '') {
-                        var warn = document.getElementById('appsScriptWarning');
-                        if (warn) warn.style.display = 'block';
-                    }
-                })();
-                </script>
+
             </div>
             <div class="card" style="text-align:center;">
                 <p style="color:#8892b0;margin-bottom:15px;">📋 <strong>Como funciona:</strong></p>
@@ -667,7 +659,7 @@ var leaderboard = JSON.parse(localStorage.getItem('newtonLeaderboard') || '[]');
 
 // ==================== SHEETDB CONFIGURATION ====================
 // API URL do SheetDB configurada automaticamente
-// Planilha: Resultados Missão Newton - Física 1
+// Planilha: Resultados Missão Newton - Engenharia Química
 var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwWYUgbuHEmduLQPllsdvVuj0QGs6Eg_SnTD9KMP5PBHQPzaW86E8AE2HEEratcwIu_DA/exec';  // <-- COLE AQUI A URL DO GOOGLE APPS SCRIPT
 
 // Variável para armazenar hora de início
@@ -676,6 +668,11 @@ var sessionStartTime = null;
 function init() {
     createStars();
     initParticles();
+    // Show warning if Apps Script URL is empty
+    if (!window.APPS_SCRIPT_URL || window.APPS_SCRIPT_URL === '') {
+        var warn = document.getElementById('appsScriptWarning');
+        if (warn) warn.style.display = 'block';
+    }
 }
 
 function createStars() {
@@ -1147,7 +1144,7 @@ function restartGame() {
 }
 
 function exportResults() {
-    if (!APPS_SCRIPT_URL) {
+    if ((!window.APPS_SCRIPT_URL && !APPS_SCRIPT_URL)) {
         showModal('⚙️ Configurar SheetDB', 'Para enviar dados automaticamente, configure a URL do SheetDB no console do navegador: localStorage.setItem("appsScriptUrl", "SUA_URL_AQUI");');
         return;
     }
@@ -1156,18 +1153,20 @@ function exportResults() {
 
 function appsScriptSend(rowData, context) {
     context = context || 'AppsScript';
+    var url = window.APPS_SCRIPT_URL || APPS_SCRIPT_URL || '';
 
-    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === '') {
+    if (!url || url === '') {
         var err = new Error('URL do Apps Script não configurada. Edite a linha 657 do código e cole a URL do deploy.');
         console.error('=== ' + context + ' ===', err.message);
         return Promise.reject(err);
     }
 
     console.log('=== ' + context + ' ===');
-    console.log('URL:', APPS_SCRIPT_URL);
+    console.log('URL:', url);
     console.log('Payload:', JSON.stringify({ data: [rowData] }, null, 2));
 
-    return fetch(APPS_SCRIPT_URL, {
+    // Try with redirect handling for Google Apps Script
+    return fetch(url, {
         method: 'POST',
         redirect: 'follow',
         headers: { 'Content-Type': 'application/json' },
@@ -1193,8 +1192,8 @@ function appsScriptSend(rowData, context) {
         });
     })
     .catch(function(error) {
-        console.warn(context + ' - Modo CORS falhou, tentando no-cors (dados podem chegar mesmo sem resposta):', error.message);
-        return fetch(APPS_SCRIPT_URL, {
+        console.warn(context + ' - CORS bloqueado, tentando no-cors:', error.message);
+        return fetch(url, {
             method: 'POST',
             mode: 'no-cors',
             redirect: 'follow',
@@ -1202,18 +1201,18 @@ function appsScriptSend(rowData, context) {
             body: JSON.stringify({ data: [rowData] })
         })
         .then(function() {
-            console.log(context + ' - Enviado em modo no-cors (sem resposta, mas dados podem ter chegado)');
-            return { result: 'success', mode: 'no-cors', note: 'Enviado sem verificar resposta. Verifique a planilha manualmente.' };
+            console.log(context + ' - Enviado em modo no-cors. Verifique a planilha.');
+            return { result: 'success', mode: 'no-cors', note: 'Dados enviados. Verifique a planilha.' };
         })
         .catch(function(err2) {
-            console.error(context + ' - Fetch Error (ambos modos falharam):', err2);
-            throw new Error('Falha em ambos os modos. Último erro: ' + err2.message);
+            console.error(context + ' - Ambos modos falharam:', err2);
+            throw new Error('Falha total: ' + err2.message);
         });
     });
 }
 
 function registerGameStart() {
-    if (!APPS_SCRIPT_URL || gameState.startRegistered) return;
+    if ((!window.APPS_SCRIPT_URL && !APPS_SCRIPT_URL) || gameState.startRegistered) return;
     var now = new Date();
 
     console.log('=== registerGameStart - VALORES ===');
@@ -1249,7 +1248,7 @@ function registerGameStart() {
 }
 
 function registerGameEnd() {
-    if (!APPS_SCRIPT_URL) return;
+    if (!window.APPS_SCRIPT_URL && !APPS_SCRIPT_URL) return;
     var endTime = new Date();
     var accuracy = gameState.totalQuestions > 0 ? Math.round((gameState.correctCount / gameState.totalQuestions) * 100) : 0;
 
@@ -1307,7 +1306,7 @@ function saveToSheetDB() {
 }
 
 function testSheetDB() {
-    if (!APPS_SCRIPT_URL) {
+    if ((!window.APPS_SCRIPT_URL && !APPS_SCRIPT_URL)) {
         showModal('⚙️ Não configurado', 'URL do SheetDB não está configurada.');
         return;
     }
