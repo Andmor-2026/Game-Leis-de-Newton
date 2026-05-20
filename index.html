@@ -668,7 +668,7 @@ var leaderboard = JSON.parse(localStorage.getItem('newtonLeaderboard') || '[]');
 // ==================== SHEETDB CONFIGURATION ====================
 // API URL do SheetDB configurada automaticamente
 // Planilha: Resultados Missão Newton - Engenharia Química
-var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwOEfBjEu9ehjwbiYTg25kFQUJJhzAkcj10eZUwJ9QjvnSvn_9DI_TADqvaXTVRV1jTjw/exec';  // <-- COLE AQUI A URL DO GOOGLE APPS SCRIPT
+var APPS_SCRIPT_URL = '';  // <-- COLE AQUI A URL DO GOOGLE APPS SCRIPT
 
 // Variável para armazenar hora de início
 var sessionStartTime = null;
@@ -1215,6 +1215,11 @@ function appsScriptSend(rowData, context) {
 function registerGameStart() {
     if (!APPS_SCRIPT_URL || gameState.startRegistered) return;
     var now = new Date();
+
+    console.log('=== registerGameStart - VALORES ===');
+    console.log('player.name:', gameState.player.name);
+    console.log('sessionId:', gameState.sessionId);
+
     var rowData = {
         Grupo: gameState.player.name,
         HoraInicio: sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : now.toLocaleString('pt-BR'),
@@ -1228,6 +1233,10 @@ function registerGameStart() {
         Status: 'INICIADO',
         SessionId: gameState.sessionId
     };
+
+    console.log('=== registerGameStart - rowData ===');
+    console.log(JSON.stringify(rowData, null, 2));
+
     appsScriptSend(rowData, 'AppsScript START')
     .then(function(result) {
         console.log('AppsScript START - Sucesso:', result);
@@ -1243,6 +1252,18 @@ function registerGameEnd() {
     if (!APPS_SCRIPT_URL) return;
     var endTime = new Date();
     var accuracy = gameState.totalQuestions > 0 ? Math.round((gameState.correctCount / gameState.totalQuestions) * 100) : 0;
+
+    console.log('=== registerGameEnd - VALORES DO GAMESTATE ===');
+    console.log('player.name:', gameState.player.name);
+    console.log('score:', gameState.score);
+    console.log('currentLevel:', gameState.currentLevel);
+    console.log('stars:', gameState.stars);
+    console.log('totalTime:', gameState.totalTime);
+    console.log('totalQuestions:', gameState.totalQuestions);
+    console.log('correctCount:', gameState.correctCount);
+    console.log('sessionId:', gameState.sessionId);
+    console.log('accuracy:', accuracy);
+
     var rowData = {
         Grupo: gameState.player.name,
         HoraInicio: sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : '-',
@@ -1256,6 +1277,10 @@ function registerGameEnd() {
         Status: 'COMPLETADO',
         SessionId: gameState.sessionId
     };
+
+    console.log('=== registerGameEnd - rowData a ser enviado ===');
+    console.log(JSON.stringify(rowData, null, 2));
+
     appsScriptSend(rowData, 'AppsScript END')
     .then(function(result) {
         console.log('AppsScript END - Sucesso:', result);
