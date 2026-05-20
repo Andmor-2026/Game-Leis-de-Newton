@@ -1153,24 +1153,30 @@ function exportResults() {
 
 function appsScriptSend(rowData, context) {
     context = context || 'AppsScript';
-    var url = window.APPS_SCRIPT_URL || APPS_SCRIPT_URL || '';
+    var baseUrl = window.APPS_SCRIPT_URL || APPS_SCRIPT_URL || '';
 
-    if (!url || url === '') {
+    if (!baseUrl || baseUrl === '') {
         var err = new Error('URL do Apps Script não configurada. Edite a linha 657 do código e cole a URL do deploy.');
         console.error('=== ' + context + ' ===', err.message);
         return Promise.reject(err);
     }
 
-    console.log('=== ' + context + ' ===');
-    console.log('URL:', url);
-    console.log('Payload:', JSON.stringify({ data: [rowData] }, null, 2));
+    // Build query string from rowData (GET doesn't have CORS preflight)
+    var params = new URLSearchParams();
+    for (var key in rowData) {
+        if (rowData.hasOwnProperty(key)) {
+            params.append(key, String(rowData[key]));
+        }
+    }
 
-    // Try with redirect handling for Google Apps Script
+    var url = baseUrl + '?' + params.toString();
+    console.log('=== ' + context + ' ===');
+    console.log('URL:', url.substring(0, 200) + '...');
+    console.log('Dados:', rowData);
+
     return fetch(url, {
-        method: 'POST',
-        redirect: 'follow',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: [rowData] })
+        method: 'GET',
+        redirect: 'follow'
     })
     .then(function(response) {
         console.log(context + ' - Status:', response.status, response.statusText);
@@ -1192,22 +1198,8 @@ function appsScriptSend(rowData, context) {
         });
     })
     .catch(function(error) {
-        console.warn(context + ' - CORS bloqueado, tentando no-cors:', error.message);
-        return fetch(url, {
-            method: 'POST',
-            mode: 'no-cors',
-            redirect: 'follow',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data: [rowData] })
-        })
-        .then(function() {
-            console.log(context + ' - Enviado em modo no-cors. Verifique a planilha.');
-            return { result: 'success', mode: 'no-cors', note: 'Dados enviados. Verifique a planilha.' };
-        })
-        .catch(function(err2) {
-            console.error(context + ' - Ambos modos falharam:', err2);
-            throw new Error('Falha total: ' + err2.message);
-        });
+        console.error(context + ' - Erro:', error);
+        throw error;
     });
 }
 
