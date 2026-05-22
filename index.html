@@ -261,17 +261,12 @@
                 <div class="card-title">🎯 Cadastro da Equipe</div>
                 <p style="margin-bottom:20px;color:#8892b0;">Informe o nome do seu grupo para embarcar na missão:</p>
                 <input type="text" id="playerName" placeholder="Nome do grupo / equipe" maxlength="50">
-                <div id="appsScriptWarning" style="display:none;margin-bottom:15px;padding:12px;background:rgba(255,23,68,0.15);border:2px solid var(--danger);border-radius:10px;color:var(--danger);text-align:center;font-weight:700;">
-                    ⚠️ URL do Google Apps Script não configurada! O jogo não registrará na planilha. Edite a linha 657 do código HTML.
-                </div>
                 <div style="text-align:center;margin-top:20px;">
                     <button type="button" class="btn btn-primary" onclick="startGame()">🚀 Iniciar Missão</button>
-                    <button type="button" class="btn btn-outline" style="margin-left:10px;" onclick="testSheetDB()">🔌 Testar Conexão</button>
                 </div>
                 <div id="loginError" style="color:var(--danger);text-align:center;margin-top:15px;display:none;">
                     Digite o nome do grupo para continuar!
                 </div>
-
             </div>
             <div class="card" style="text-align:center;">
                 <p style="color:#8892b0;margin-bottom:15px;">📋 <strong>Como funciona:</strong></p>
@@ -659,8 +654,8 @@ var leaderboard = JSON.parse(localStorage.getItem('newtonLeaderboard') || '[]');
 
 // ==================== SHEETDB CONFIGURATION ====================
 // API URL do SheetDB configurada automaticamente
-// Planilha: Resultados Missão Newton - Engenharia Química
-var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXDjhgBdTLB9ZCc_gT7KV6qlWZv2wjuF39P9BZP0xh7uZHXi3OPZQXOxCq0sa-XQ4eLw/exec';  // <-- COLE AQUI A URL DO GOOGLE APPS SCRIPT
+// Planilha: Resultados Missão Newton - Física 1
+var SHEETDB_URL = 'https://sheetdb.io/api/v1/vun50cuou811x';
 
 // Variável para armazenar hora de início
 var sessionStartTime = null;
@@ -668,11 +663,6 @@ var sessionStartTime = null;
 function init() {
     createStars();
     initParticles();
-    // Show warning if Apps Script URL is empty
-    if (!window.APPS_SCRIPT_URL || window.APPS_SCRIPT_URL === '') {
-        var warn = document.getElementById('appsScriptWarning');
-        if (warn) warn.style.display = 'block';
-    }
 }
 
 function createStars() {
@@ -1144,153 +1134,78 @@ function restartGame() {
 }
 
 function exportResults() {
-    if ((!window.APPS_SCRIPT_URL && !APPS_SCRIPT_URL)) {
-        showModal('⚙️ Configurar SheetDB', 'Para enviar dados automaticamente, configure a URL do SheetDB no console do navegador: localStorage.setItem("appsScriptUrl", "SUA_URL_AQUI");');
+    if (!SHEETDB_URL) {
+        showModal('⚙️ Configurar SheetDB', 'Para enviar dados automaticamente, configure a URL do SheetDB no console do navegador: localStorage.setItem("sheetdbUrl", "SUA_URL_AQUI");');
         return;
     }
     registerGameEnd();
 }
 
-function appsScriptSend(rowData, context) {
-    context = context || 'AppsScript';
-    var baseUrl = window.APPS_SCRIPT_URL || APPS_SCRIPT_URL || '';
+function sheetdbSend(rowData) {
+    try {
+        var payload = Object.assign({
+            Grupo: gameState.player.name,
+            HoraInicio: sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
+            HoraFim: new Date().toLocaleString('pt-BR'),
+            Pontuacao: gameState.score,
+            NivelMaximo: gameState.currentLevel + 1,
+            Estrelas: gameState.stars,
+            TempoTotal: gameState.totalTime,
+            Precisao: gameState.totalQuestions > 0 ? Math.round((gameState.correctCount / gameState.totalQuestions) * 100) + '%' : '0%',
+            Data: new Date().toLocaleDateString('pt-BR'),
+            Status: 'COMPLETADO',
+            SessionId: gameState.sessionId || ''
+        }, rowData);
 
-    if (!baseUrl || baseUrl === '') {
-        var err = new Error('URL do Apps Script não configurada. Edite a linha 657 do código e cole a URL do deploy.');
-        console.error('=== ' + context + ' ===', err.message);
-        return Promise.reject(err);
+        fetch(SHEETDB_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ data: [payload] })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(r) { console.log('SheetDB OK:', r); })
+        .catch(function(e) { console.error('SheetDB erro:', e); });
+    } catch(err) {
+        console.error('SheetDB erro geral:', err);
     }
-
-    console.log('=== ' + context + ' ===');
-    console.log('URL base:', baseUrl);
-    console.log('Dados:', rowData);
-
-    return new Promise(function(resolve, reject) {
-        // Create a hidden form and submit it via POST to bypass CORS
-        var formId = 'appsScriptForm_' + Date.now();
-        var form = document.createElement('form');
-        form.id = formId;
-        form.method = 'POST';
-        form.action = baseUrl;
-        form.target = '_blank'; // Open in new tab (user can close it)
-        form.style.display = 'none';
-
-        // Add all fields as hidden inputs
-        for (var key in rowData) {
-            if (rowData.hasOwnProperty(key)) {
-                var input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = key;
-                input.value = String(rowData[key]);
-                form.appendChild(input);
-            }
-        }
-
-        document.body.appendChild(form);
-
-        // Submit the form
-        form.submit();
-
-        // Clean up form after submission
-        setTimeout(function() {
-            var f = document.getElementById(formId);
-            if (f) f.remove();
-        }, 1000);
-
-        // Since we can't read the response due to cross-origin, we assume success
-        // The user will see a new tab with JSON response that they can close
-        console.log(context + ' - Formulário enviado. Verifique a planilha.');
-        resolve({ result: 'success', mode: 'form-post', note: 'Dados enviados via formulário. Verifique a planilha.' });
-    });
 }
 
 function registerGameStart() {
-    if ((!window.APPS_SCRIPT_URL && !APPS_SCRIPT_URL) || gameState.startRegistered) return;
-    var now = new Date();
+    if (!SHEETDB_URL || gameState.startRegistered) return;
+    try {
+        var now = new Date();
+        var payload = {
+            Grupo: gameState.player.name,
+            HoraInicio: sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : now.toLocaleString('pt-BR'),
+            HoraFim: '-',
+            Pontuacao: 0,
+            NivelMaximo: 0,
+            Estrelas: 0,
+            TempoTotal: 0,
+            Precisao: '-',
+            Data: now.toLocaleDateString('pt-BR'),
+            Status: 'INICIADO',
+            SessionId: gameState.sessionId || ''
+        };
 
-    console.log('=== registerGameStart - VALORES ===');
-    console.log('player.name:', gameState.player.name);
-    console.log('sessionId:', gameState.sessionId);
-
-    var rowData = {
-        Grupo: gameState.player.name,
-        HoraInicio: sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : now.toLocaleString('pt-BR'),
-        HoraFim: '-',
-        Pontuacao: 0,
-        NivelMaximo: 0,
-        Estrelas: 0,
-        TempoTotal: 0,
-        Precisao: '-',
-        Data: now.toLocaleDateString('pt-BR'),
-        Status: 'INICIADO',
-        SessionId: gameState.sessionId
-    };
-
-    console.log('=== registerGameStart - rowData ===');
-    console.log(JSON.stringify(rowData, null, 2));
-
-    appsScriptSend(rowData, 'AppsScript START')
-    .then(function(result) {
-        console.log('AppsScript START - Sucesso:', result);
-        gameState.startRegistered = true;
-    })
-    .catch(function(error) {
-        console.error('AppsScript START - Erro:', error);
-    });
+        fetch(SHEETDB_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ data: [payload] })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(r) { 
+            console.log('SheetDB START OK:', r); 
+            gameState.startRegistered = true;
+        })
+        .catch(function(e) { console.error('SheetDB START erro:', e); });
+    } catch(err) {
+        console.error('SheetDB START erro geral:', err);
+    }
 }
 
 function registerGameEnd() {
-    if (!window.APPS_SCRIPT_URL && !APPS_SCRIPT_URL) return;
-    var endTime = new Date();
-    var accuracy = gameState.totalQuestions > 0 ? Math.round((gameState.correctCount / gameState.totalQuestions) * 100) : 0;
-
-    console.log('=== registerGameEnd - VALORES DO GAMESTATE ===');
-    console.log('player.name:', gameState.player.name);
-    console.log('score:', gameState.score);
-    console.log('currentLevel:', gameState.currentLevel);
-    console.log('stars:', gameState.stars);
-    console.log('totalTime:', gameState.totalTime);
-    console.log('totalQuestions:', gameState.totalQuestions);
-    console.log('correctCount:', gameState.correctCount);
-    console.log('sessionId:', gameState.sessionId);
-    console.log('accuracy:', accuracy);
-
-    var rowData = {
-        Grupo: gameState.player.name,
-        HoraInicio: sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : '-',
-        HoraFim: endTime.toLocaleString('pt-BR'),
-        Pontuacao: gameState.score,
-        NivelMaximo: gameState.currentLevel + 1,
-        Estrelas: gameState.stars,
-        TempoTotal: gameState.totalTime,
-        Precisao: accuracy + '%',
-        Data: endTime.toLocaleDateString('pt-BR'),
-        Status: 'COMPLETADO',
-        SessionId: gameState.sessionId
-    };
-
-    console.log('=== registerGameEnd - rowData a ser enviado ===');
-    console.log(JSON.stringify(rowData, null, 2));
-
-    appsScriptSend(rowData, 'AppsScript END')
-    .then(function(result) {
-        console.log('AppsScript END - Sucesso:', result);
-        var statusDiv = document.getElementById('sheetdbStatus');
-        if (statusDiv) {
-            statusDiv.innerHTML = '<span style="color:var(--success);">✅ Dados enviados para a planilha!</span>';
-            statusDiv.style.background = 'rgba(0,230,118,0.1)';
-            statusDiv.style.border = '1px solid var(--success)';
-        }
-    })
-    .catch(function(error) {
-        console.error('AppsScript END - Erro:', error);
-        var statusDiv = document.getElementById('sheetdbStatus');
-        if (statusDiv) {
-            statusDiv.innerHTML = '<span style="color:var(--danger);">❌ Falha ao enviar. Verifique console (F12).</span>';
-            statusDiv.style.background = 'rgba(255,23,68,0.1)';
-            statusDiv.style.border = '1px solid var(--danger)';
-        }
-    });
+    sheetdbSend({ Status: 'COMPLETADO' });
 }
 
 function saveToSheetDB() {
@@ -1298,62 +1213,49 @@ function saveToSheetDB() {
 }
 
 function testSheetDB() {
-    if ((!window.APPS_SCRIPT_URL && !APPS_SCRIPT_URL)) {
+    if (!SHEETDB_URL) {
         showModal('⚙️ Não configurado', 'URL do SheetDB não está configurada.');
         return;
     }
     var now = new Date();
-    var testData = {
-        Grupo: 'TESTE_CONEXAO_' + now.getTime(),
+    var payload = {
+        Grupo: 'TESTE_' + now.getTime(),
         HoraInicio: now.toLocaleString('pt-BR'),
         HoraFim: now.toLocaleString('pt-BR'),
-        Pontuacao: 0,
-        NivelMaximo: 0,
-        Estrelas: 0,
-        TempoTotal: 0,
-        Precisao: '0%',
+        Pontuacao: 999,
+        NivelMaximo: 5,
+        Estrelas: 3,
+        TempoTotal: 120,
+        Precisao: '100%',
         Data: now.toLocaleDateString('pt-BR'),
         Status: 'TESTE',
         SessionId: 'test_' + now.getTime()
     };
-    appsScriptSend(testData, 'AppsScript TEST')
-    .then(function(result) {
-        showModal('✅ Teste Apps Script', 'Conexão OK!\nVerifique a última linha da planilha.\n\nResposta: ' + JSON.stringify(result).substring(0, 300));
+
+    fetch(SHEETDB_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ data: [payload] })
     })
-    .catch(function(error) {
-        showModal('❌ Erro', 'Falha: ' + error.message);
+    .then(function(r) { return r.json(); })
+    .then(function(r) { 
+        console.log('SheetDB TEST:', r); 
+        showModal('✅ Teste', 'Resposta: ' + JSON.stringify(r));
+    })
+    .catch(function(e) { 
+        console.error('SheetDB TEST erro:', e); 
+        showModal('❌ Erro', e.message);
     });
 }
 
 function configureSheetDB() {
-    var url = prompt('Cole a URL do SheetDB (ex: https://sheetdb.io/api/v1/ABCDE12345):');
+    var url = prompt('Cole a URL do SheetDB:');
     if (url && url.trim()) {
-        localStorage.setItem('appsScriptUrl', url.trim());
-        APPS_SCRIPT_URL = url.trim();
-        showModal('✅ Configurado!', 'URL do SheetDB salva com sucesso!');
+        localStorage.setItem('sheetdbUrl', url.trim());
+        SHEETDB_URL = url.trim();
+        showModal('✅ Configurado!', 'URL salva.');
     }
-}
-
-function exportToCSV() {
-    var accuracy = gameState.totalQuestions > 0 ? Math.round((gameState.correctCount / gameState.totalQuestions) * 100) : 0;
-    var csv = 'Grupo,Nivel,Questao,RespostaCorreta,Pontos,Tempo,Data\n';
-    var i;
-    for (i = 0; i < gameState.answers.length; i++) {
-        var ans = gameState.answers[i];
-        csv += gameState.player.name + ',' + ans.level + ',' + ans.question + ',' + (ans.correct ? 'SIM' : 'NAO') + ',' + ans.points + ',' + ans.time + ',' + new Date().toLocaleString('pt-BR') + '\n';
-    }
-    csv += '\nRESUMO,,,,,,\n';
-    csv += 'Grupo,PontuacaoTotal,TempoTotal,Estrelas,Precisao,HoraInicio,HoraFim\n';
-    csv += gameState.player.name + ',' + gameState.score + ',' + gameState.totalTime + ',' + gameState.stars + ',' + accuracy + '%,' + (sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : '-') + ',' + new Date().toLocaleString('pt-BR') + '\n';
-    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    var link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'newton_game_' + gameState.player.name.split(' ').join('_') + '_' + new Date().toISOString().slice(0,10) + '.csv';
-    link.click();
-    showModal('📊 CSV Gerado!', 'Arquivo CSV baixado! Importe-o manualmente no Google Planilhas ou configure a URL do Apps Script para envio automático.');
-}
-
-function showConfetti() {
+}function showConfetti() {
     var colors = ['#00d4ff', '#ff6b35', '#7c3aed', '#00e676', '#ffc400'];
     var i;
     for (i = 0; i < 50; i++) {
