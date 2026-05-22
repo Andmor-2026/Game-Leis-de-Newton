@@ -286,7 +286,7 @@
                 </div>
                 <div style="margin-top:15px;padding:15px;background:rgba(0,212,255,0.05);border-radius:10px;border:1px solid rgba(0,212,255,0.2);">
                     <strong style="color:var(--primary);">📊 Registro Automático Ativado</strong><br>
-                    <small style="color:#8892b0;">✅ Os resultados de cada grupo são enviados automaticamente para a planilha Google ao finalizar o game. Dados registrados: Hora de Início, Hora de Finalização, Pontuação, Nível Máximo, Estrelas, Tempo Total e Precisão.</small>
+                    <small style="color:#8892b0;">✅ Os resultados são enviados automaticamente para a planilha Google. Dados registrados: Nome do Grupo, Data de Início, Hora de Início, Pontuação por Missão, Pontuação Total e Hora de Conclusão.</small>
                 </div>
             </div>
         </div>
@@ -654,7 +654,7 @@ var leaderboard = JSON.parse(localStorage.getItem('newtonLeaderboard') || '[]');
 
 // ==================== SHEETDB CONFIGURATION ====================
 // API URL do SheetDB configurada automaticamente
-// Planilha: Resultados Missão Newton - Física 1
+// Planilha: Resultados Missão Newton - Engenharia Química
 var SHEETDB_URL = 'https://sheetdb.io/api/v1/vun50cuou811x';
 
 // Variável para armazenar hora de início
@@ -973,6 +973,25 @@ function finishLevel() {
         level: gameState.currentLevel + 1, score: gameState.score,
         correct: levelCorrect, total: level.questions.length
     });
+    // Register mission completion to SheetDB
+    try {
+        var endTime = new Date();
+        var dataStr = endTime.toLocaleDateString('pt-BR');
+        var horaStr = endTime.toLocaleTimeString('pt-BR');
+        var rowArray = [
+            gameState.player.name,
+            dataStr,
+            '-',
+            gameState.score - (gameState.levelScores.length > 1 ? gameState.levelScores[gameState.levelScores.length - 2].score : 0),
+            gameState.score,
+            horaStr
+        ];
+        fetch(SHEETDB_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ data: [rowArray] })
+        }).catch(function(){});
+    } catch(e) {}
     if (levelCorrect >= required) {
         showConfetti();
         document.getElementById('completeIcon').textContent = level.icon;
@@ -1143,24 +1162,23 @@ function exportResults() {
 
 function sheetdbSend(rowData) {
     try {
-        var payload = Object.assign({
-            Grupo: gameState.player.name,
-            HoraInicio: sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
-            HoraFim: new Date().toLocaleString('pt-BR'),
-            Pontuacao: gameState.score,
-            NivelMaximo: gameState.currentLevel + 1,
-            Estrelas: gameState.stars,
-            TempoTotal: gameState.totalTime,
-            Precisao: gameState.totalQuestions > 0 ? Math.round((gameState.correctCount / gameState.totalQuestions) * 100) + '%' : '0%',
-            Data: new Date().toLocaleDateString('pt-BR'),
-            Status: 'COMPLETADO',
-            SessionId: gameState.sessionId || ''
-        }, rowData);
+        var endTime = new Date();
+        var dataStr = endTime.toLocaleDateString('pt-BR');
+        var horaStr = endTime.toLocaleTimeString('pt-BR');
+        // Column order: Grupo | DataInicio | HoraInicio | PontuacaoMissao | PontuacaoTotal | HoraConclusao
+        var rowArray = [
+            gameState.player.name,           // Grupo
+            dataStr,                          // DataInicio
+            '-',                              // HoraInicio (not available here)
+            rowData.pontuacaoMissao || 0,     // PontuacaoMissao (points for this mission)
+            gameState.score,                  // PontuacaoTotal (total accumulated)
+            horaStr                           // HoraConclusao
+        ];
 
         fetch(SHEETDB_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ data: [payload] })
+            body: JSON.stringify({ data: [rowArray] })
         })
         .then(function(r) { return r.json(); })
         .then(function(r) { console.log('SheetDB OK:', r); })
@@ -1174,24 +1192,22 @@ function registerGameStart() {
     if (!SHEETDB_URL || gameState.startRegistered) return;
     try {
         var now = new Date();
-        var payload = {
-            Grupo: gameState.player.name,
-            HoraInicio: sessionStartTime ? sessionStartTime.toLocaleString('pt-BR') : now.toLocaleString('pt-BR'),
-            HoraFim: '-',
-            Pontuacao: 0,
-            NivelMaximo: 0,
-            Estrelas: 0,
-            TempoTotal: 0,
-            Precisao: '-',
-            Data: now.toLocaleDateString('pt-BR'),
-            Status: 'INICIADO',
-            SessionId: gameState.sessionId || ''
-        };
+        var dataStr = now.toLocaleDateString('pt-BR');
+        var horaStr = now.toLocaleTimeString('pt-BR');
+        // Column order: Grupo | DataInicio | HoraInicio | PontuacaoMissao | PontuacaoTotal | HoraConclusao
+        var rowArray = [
+            gameState.player.name,  // Grupo
+            dataStr,                 // DataInicio
+            horaStr,                 // HoraInicio
+            '-',                     // PontuacaoMissao (not available yet)
+            0,                       // PontuacaoTotal (0 at start)
+            '-'                      // HoraConclusao (not available yet)
+        ];
 
         fetch(SHEETDB_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ data: [payload] })
+            body: JSON.stringify({ data: [rowArray] })
         })
         .then(function(r) { return r.json(); })
         .then(function(r) { 
@@ -1205,7 +1221,7 @@ function registerGameStart() {
 }
 
 function registerGameEnd() {
-    sheetdbSend({ Status: 'COMPLETADO' });
+    sheetdbSend({ pontuacaoMissao: gameState.score });
 }
 
 function saveToSheetDB() {
@@ -1218,24 +1234,22 @@ function testSheetDB() {
         return;
     }
     var now = new Date();
-    var payload = {
-        Grupo: 'TESTE_' + now.getTime(),
-        HoraInicio: now.toLocaleString('pt-BR'),
-        HoraFim: now.toLocaleString('pt-BR'),
-        Pontuacao: 999,
-        NivelMaximo: 5,
-        Estrelas: 3,
-        TempoTotal: 120,
-        Precisao: '100%',
-        Data: now.toLocaleDateString('pt-BR'),
-        Status: 'TESTE',
-        SessionId: 'test_' + now.getTime()
-    };
+    var dataStr = now.toLocaleDateString('pt-BR');
+    var horaStr = now.toLocaleTimeString('pt-BR');
+    // Test with new column order: Grupo | DataInicio | HoraInicio | PontuacaoMissao | PontuacaoTotal | HoraConclusao
+    var rowArray = [
+        'TESTE_' + now.getTime(),
+        dataStr,
+        horaStr,
+        100,
+        500,
+        horaStr
+    ];
 
     fetch(SHEETDB_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ data: [payload] })
+        body: JSON.stringify({ data: [rowArray] })
     })
     .then(function(r) { return r.json(); })
     .then(function(r) { 
